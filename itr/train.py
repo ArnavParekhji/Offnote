@@ -20,10 +20,8 @@ from config import replace, preEnc, preEncDec
 def main():
     rconf = preEncDec
     model, tokenizers = M.build_model(rconf)
-
-    # writer = SummaryWriter(rconf.log_dir)
-    
     trainer = pl.Trainer(train_percent_check=0.1,  max_epochs=rconf.epochs)
+    # trainer = pl.Trainer(max_epochs=rconf.epochs)
     trainer.fit(model)
     print(model.get_values())
 
@@ -32,11 +30,3 @@ def main():
 if __name__ == '__main__':
     # preproc_data()
     main()
-
-
-
-
-
-
-
-

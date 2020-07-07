@@ -1,5 +1,4 @@
 import torch
-from torch.utils.tensorboard import SummaryWriter
 from transformers import BertConfig, BertModel, BertForMaskedLM, BertTokenizer
 from transformers import WEIGHTS_NAME, CONFIG_NAME
 
@@ -15,12 +14,11 @@ from pathlib import Path
 
 
 class MyLightningModule(LightningModule):
-    def __init__(self, encoder, decoder, config, tokenizers, pad_sequence, writer):
+    def __init__(self, encoder, decoder, config, tokenizers, pad_sequence):
         super(MyLightningModule, self).__init__()
         self.config = config
         self.tokenizers = tokenizers
         self.pad_sequence = pad_sequence
-        self.writer = writer
         self.encoder = encoder
         self.decoder = decoder
         self.training_loss_values = []
@@ -95,19 +93,23 @@ class MyLightningModule(LightningModule):
 
     def training_epoch_end(self, outputs):
         train_loss = torch.stack([x["loss"] for x in outputs]).mean()
-        self.training_loss_values.append(train_loss)
-        self.logger.experiment.add_scalar("Loss/Train", train_loss)
-        log = {"train_loss": train_loss}
+        self.training_loss_values.append(train_loss.item())
+        self.logger.experiment.add_scalar("Loss/Train", train_loss.item(), self.current_epoch)
+        for name, weights in self.named_parameters():
+            self.logger.experiment.add_histogram(name, weights, self.current_epoch)
+            print("Added: " + str(name))
+        log = {"train_loss": train_loss.item()}
         return {"log": log}
 
     def validation_epoch_end(self, outputs):
         val_loss = torch.stack([x["val_loss"] for x in outputs]).mean()
         eval_accuracy = torch.stack([x["tmp_eval_accuracy"] for x in outputs]).mean()
-        self.validation_loss_values.append(val_loss)
-        self.validation_accuracy_values.append(eval_accuracy)
-        self.logger.experiment.add_scalar("Loss/Val", val_loss)
-        self.logger.experiment.add_scalar("Accuracy/Val", eval_accuracy)
-        log = {"avg_val_loss": val_loss, "eval_accuracy": eval_accuracy}
+        self.validation_loss_values.append(val_loss.item())
+        self.validation_accuracy_values.append(eval_accuracy.item())
+        self.logger.experiment.add_scalar("Loss/Val", val_loss.item(), self.current_epoch)
+        self.logger.experiment.add_scalar("Accuracy/Val", eval_accuracy.item(), self.current_epoch)
+        self.logger.experiment.flush()
+        log = {"avg_val_loss": val_loss.item(), "eval_accuracy": eval_accuracy.item()}
         return {"log": log}
 
     def get_values(self):
@@ -164,10 +166,8 @@ def build_model(config):
     tokenizers = ED({'src': src_tokenizer, 'tgt': tgt_tokenizer})
     pad_sequence = PadSequence(tokenizers.src.pad_token_id, tokenizers.tgt.pad_token_id)
 
-    writer = SummaryWriter(config.log_dir)
-
     # model = TranslationModel(encoder, decoder)
-    model = MyLightningModule(encoder, decoder, config, tokenizers, pad_sequence, writer)
+    model = MyLightningModule(encoder, decoder, config, tokenizers, pad_sequence)
     # model.cuda()
 
     return model, tokenizers
